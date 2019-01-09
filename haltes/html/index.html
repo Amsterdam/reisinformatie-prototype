@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+       #left{
+        position: fixed;
+        height: 100%;
+        width: 60%;
+       }
+       
+      #map {
+        position: fixed;
+        height: 100%;
+        width: 100%;
+      }
+      
+      #right{
+        position: fixed;
+        height: 100%;
+        left: 60%;
+        width: 40%;
+        bottom: 0px;
+        top: 0px;
+      }
+      
+      #streetview{
+          position: absolute;
+          right: 10px;
+          top: 10px;
+          left: 10px;
+          height: 40%;
+          z-index: 100;
+      }
+
+      #info{
+          position: absolute;
+          right: 10px;
+          top: 40%;
+          bottom: 80px;
+          left: 10px;
+          background: white;
+          padding: 10px;
+          overflow: auto;
+      }
+
+      #legenda{
+          position: absolute;
+          right: 10px;
+          left: 10px;
+          height: 40px;
+          bottom: 10px;
+          background: white;
+          padding: 10px;
+          border: 1px solid black;
+          overflow: auto;
+      }
+
+      html, body {
+        font-family: Arial, Verdana;
+        font-size: 14px;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      
+      dt{
+          font-weight: bold;
+      }
+      
+      button.c-panoviewer-hotspot__content{
+        margin: 0 -20px;
+        padding: 0 20px;
+        outline: none;
+        border: none;
+        cursor: pointer;
+        background: url("img/hotspot.svg") transparent no-repeat;
+        width: 83px;
+        height: 83px;
+        transform: rotateX(61.7236deg);
+      }
+    </style>
+  </head>
+  <body>
+<script
+  src="https://code.jquery.com/jquery-1.12.4.min.js"
+  integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+  crossorigin="anonymous"></script>   
+  <script type="text/javascript" src='panoviewer.js'></script>
+  <div id='left'>
+    <div id="map"></div>
+  </div>
+  <div id='right'>
+    <div id="streetview">
+    </div>
+    <div id="info">
+        <div style='padding: 10px; border-bottom: 1px solid black;'>
+            <span><i>Rondkijken met muis/swipe!</i></span>
+        </div>
+        <div id="details">
+            <h2>Klik op een halte</h2>
+            Klik op een halte of locatie om meer details te zien en hier rond te kijken.
+        </div>
+    </div>
+    <div id="legenda">
+        <strong>Kleurcodering volgens:</strong><br/>
+            Centraal Haltebestand (CHB), veld "disabledaccessible"
+    </div>
+  </div>
+    <script>
+      var map, markers, pv;
+      var curLocatieLat, curLocatieLon;
+      markers = [];
+      
+      
+      function loadCHB(town){
+        $.getJSON("../data/"+ town +".json", function(result){
+        var bounds = new google.maps.LatLngBounds();
+
+            for(i in result.features){
+              var coords = result.features[i].geometry.coordinates;
+              var latLng = new google.maps.LatLng(coords[1],coords[0]);
+
+              if(result.features[i].properties["marker-color"] == "#F00"){
+                  var img = "img/marker-red.png";
+                  var color = 'red';
+              } else if(result.features[i].properties["marker-color"] == "#0F0"){
+                  var img = "img/marker-green.png";
+                  var color = 'green';
+              }else if(result.features[i].properties["marker-color"] == "#FF0"){
+                  var img = "img/marker-yellow.png";
+                  var color = 'yellow';
+              } else {
+                  var img = "img/marker-blue.png";
+                  var color = 'blue';
+              }
+
+              if(img){
+                  var marker = new google.maps.Marker({
+                    position: latLng,
+                    map: map,
+                    icon: img,
+                    num: i
+                  });
+
+                  marker.addListener('click', function() {
+                      var num = i;
+                      $("#info").slideDown();
+                      var html = "<h1>" + result.features[this.num].properties["publicname"] + "</h1><TABLE>";
+                      for(var j in result.features[this.num].properties){
+                          if(result.features[this.num].properties[j]){
+                              html += "<TR><TD style='font-weight:bold'>" + j + "</TD>";
+                              html += "<TD>"+ result.features[this.num].properties[j] + "</TD></TR>";
+                          }
+                      }
+                      html += "</TABLE>";
+                      $("#details").html(html);
+                      setLocatie(result.features[this.num].geometry.coordinates[1],result.features[this.num].geometry.coordinates[0]);
+                  });
+                  
+                  markers.push(marker);
+                  bounds.extend(latLng);
+              }
+              
+            }
+
+        map.fitBounds(bounds);            
+        });
+      }
+      
+      
+      function setLocatie(lat, lon){
+          curLocatieLat = lat;
+          curLocatieLon = lon;
+          var latLng = new google.maps.LatLng(lat, lon);
+          var panorama = new google.maps.StreetViewPanorama(
+                document.getElementById('streetview'), {
+                  position: latLng,
+                });
+            map.setStreetView(panorama);                  
+      }
+      
+      function resetLocatie(){
+          setLocatie(curLocatieLat, curLocatieLon);
+      }
+      
+      function markersReset(value){
+        for (var i = 0; i < markers.length; i++) {
+          markers[i].setMap(null);
+        }
+        markers = [];
+        loadCHB(value);
+      }
+      
+      function start() {
+        map = new google.maps.Map(document.getElementById('map'), {
+          zoom: 13,
+          center: new google.maps.LatLng(52.36, 4.8924),
+          mapTypeId: 'terrain'
+        });
+       
+       
+        var url_string = window.location.href;
+        var url = new URL(url_string);
+        var town = url.searchParams.get("town");
+        if(!town) town = "Amsterdam";
+        loadCHB(town);
+      }
+    </script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCOAubofBnTMGF_2nAtaJ8bP6gYS0BvUoM&libraries=visualization&callback=start">
+    <!-- Add your Google API KEY in the url above -->
+    </script>
+  </body>
+</html>
